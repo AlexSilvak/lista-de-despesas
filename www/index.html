@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Livro de Despesas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root{
     --paper: #EDE7D6;
@@ -68,6 +69,19 @@
     text-align:center;
     text-transform: capitalize;
   }
+
+  .export-btn{
+    font-family: system-ui, sans-serif;
+    font-size: 12px;
+    color: var(--ink-soft);
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 5px 10px;
+    cursor: pointer;
+    margin-left: 8px;
+  }
+  .export-btn:hover{ border-color: var(--brass); color: var(--brass); }
 
   .balance-block{
     display:flex;
@@ -225,6 +239,9 @@
     .entry-form select, .entry-cat{ display:none; }
     .balance-value{ font-size: 32px; }
     .summary-row{ flex-wrap:wrap; gap: 14px; }
+    header{ flex-wrap: wrap; gap: 10px; }
+    .month-nav{ flex-wrap: wrap; justify-content:flex-end; }
+    .export-btn{ margin-left: 0; }
   }
 </style>
 </head>
@@ -358,6 +375,7 @@ function render(){
         <button id="prev-month" aria-label="Mês anterior">‹</button>
         <span class="month-label">${monthLabel(currentMonth, currentYear)}</span>
         <button id="next-month" aria-label="Próximo mês">›</button>
+        <button class="export-btn" id="export-pdf">Exportar PDF</button>
       </div>
     </header>
 
@@ -406,6 +424,7 @@ function render(){
 
   document.getElementById('prev-month').onclick = () => changeMonth(-1);
   document.getElementById('next-month').onclick = () => changeMonth(1);
+  document.getElementById('export-pdf').onclick = () => exportPDF(monthEntries, total);
 
   document.getElementById('f-cat').onchange = async (ev) => {
     if(ev.target.value === NEW_CATEGORY_VALUE){
@@ -461,6 +480,72 @@ function escapeHtml(str){
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function exportPDF(monthEntries, total){
+  if(!window.jspdf){
+    alert('Não foi possível carregar o gerador de PDF. Verifique sua conexão com a internet e tente de novo.');
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const marginX = 15;
+  let y = 20;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(18);
+  doc.text('Livro de despesas', marginX, y);
+  y += 8;
+  doc.setFontSize(12);
+  doc.setTextColor(90, 90, 90);
+  doc.text(monthLabel(currentMonth, currentYear), marginX, y);
+  y += 12;
+
+  doc.setDrawColor(200, 195, 175);
+  doc.line(marginX, y, 195, y);
+  y += 8;
+
+  doc.setFontSize(10);
+  doc.setTextColor(60, 60, 60);
+  doc.text('Data', marginX, y);
+  doc.text('Descrição', marginX + 20, y);
+  doc.text('Categoria', marginX + 105, y);
+  doc.text('Valor', 195, y, { align: 'right' });
+  y += 5;
+  doc.line(marginX, y, 195, y);
+  y += 7;
+
+  doc.setTextColor(30, 30, 30);
+  if(monthEntries.length === 0){
+    doc.text('Nenhum lançamento neste mês.', marginX, y);
+    y += 8;
+  } else {
+    monthEntries.forEach(e => {
+      if(y > 275){
+        doc.addPage();
+        y = 20;
+      }
+      const d = new Date(e.date + 'T00:00:00');
+      const dLabel = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      const c = catInfo(e.category);
+      doc.text(dLabel, marginX, y);
+      doc.text(e.description.slice(0, 40), marginX + 20, y);
+      doc.text(c.label, marginX + 105, y);
+      doc.text(fmtMoney(e.amount), 195, y, { align: 'right' });
+      y += 7;
+    });
+  }
+
+  y += 5;
+  doc.line(marginX, y, 195, y);
+  y += 9;
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Total do mês', marginX, y);
+  doc.text(fmtMoney(total), 195, y, { align: 'right' });
+
+  const fileMonth = monthLabel(currentMonth, currentYear).replace(/\s+/g, '-');
+  doc.save(`despesas-${fileMonth}.pdf`);
 }
 
 loadEntries();
