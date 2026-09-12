@@ -183,6 +183,7 @@
   .cat-lazer{ background: #F1EAD0; color: var(--brass); }
   .cat-saude{ background: var(--sage-bg); color: var(--sage); }
   .cat-outros{ background: #E8E6E1; color: var(--ink-soft); }
+  .cat-custom{ background: #F1EAD0; color: var(--brass); }
 
   .entry-amount{
     font-size: 16px;
@@ -233,7 +234,7 @@
 </div>
 
 <script>
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   { id: 'alimentacao', label: 'Alimentação' },
   { id: 'transporte', label: 'Transporte' },
   { id: 'moradia', label: 'Moradia' },
@@ -241,12 +242,20 @@ const CATEGORIES = [
   { id: 'saude', label: 'Saúde' },
   { id: 'outros', label: 'Outros' },
 ];
+const NEW_CATEGORY_VALUE = '__nova_categoria__';
 
 const STORAGE_KEY = 'expenses:entries';
+const CATEGORIES_KEY = 'expenses:categories';
 let entries = [];
+let customCategories = [];
 let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
 let formError = '';
+let selectedCategory = DEFAULT_CATEGORIES[0].id;
+
+function allCategories(){
+  return [...DEFAULT_CATEGORIES, ...customCategories];
+}
 
 function fmtMoney(v){
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -263,24 +272,45 @@ function monthLabel(m, y){
 }
 
 function catInfo(id){
-  return CATEGORIES.find(c => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
+  return allCategories().find(c => c.id === id) || DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1];
+}
+
+function slugify(text){
+  return text.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'categoria-' + Date.now().toString(36);
 }
 
 async function loadEntries(){
   try{
-    const res = await window.storage.get(STORAGE_KEY, false);
-    entries = res ? JSON.parse(res.value) : [];
+    const raw = localStorage.getItem(STORAGE_KEY);
+    entries = raw ? JSON.parse(raw) : [];
   }catch(e){
     entries = [];
+  }
+  try{
+    const rawCats = localStorage.getItem(CATEGORIES_KEY);
+    customCategories = rawCats ? JSON.parse(rawCats) : [];
+  }catch(e){
+    customCategories = [];
   }
   render();
 }
 
 async function saveEntries(){
   try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(entries), false);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
   }catch(e){
     console.error('Falha ao salvar', e);
+  }
+}
+
+async function saveCategories(){
+  try{
+    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(customCategories));
+  }catch(e){
+    console.error('Falha ao salvar categorias', e);
   }
 }
 
@@ -344,7 +374,8 @@ function render(){
       <input type="date" id="f-date" value="${todayISO()}" required />
       <input type="text" id="f-desc" placeholder="Descrição" required />
       <select id="f-cat">
-        ${CATEGORIES.map(c => `<option value="${c.id}">${c.label}</option>`).join('')}
+        ${allCategories().map(c => `<option value="${c.id}" ${c.id === selectedCategory ? 'selected' : ''}>${c.label}</option>`).join('')}
+        <option value="${NEW_CATEGORY_VALUE}">+ Nova categoria</option>
       </select>
       <input type="number" id="f-amount" placeholder="0,00" step="0.01" min="0" inputmode="decimal" required />
       <button type="submit" class="add-btn" aria-label="Adicionar lançamento">+</button>
@@ -358,11 +389,12 @@ function render(){
             const c = catInfo(e.category);
             const d = new Date(e.date + 'T00:00:00');
             const dLabel = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            const isDefault = DEFAULT_CATEGORIES.some(dc => dc.id === c.id);
             return `
               <div class="entry-row">
                 <span class="entry-date">${dLabel}</span>
                 <span class="entry-desc">${escapeHtml(e.description)}</span>
-                <span class="entry-cat cat-${c.id}">${c.label}</span>
+                <span class="entry-cat ${isDefault ? 'cat-' + c.id : 'cat-custom'}">${escapeHtml(c.label)}</span>
                 <span class="entry-amount">− ${fmtMoney(e.amount)}</span>
                 <button class="del-btn" data-id="${e.id}" aria-label="Excluir lançamento">✕</button>
               </div>
@@ -374,6 +406,24 @@ function render(){
 
   document.getElementById('prev-month').onclick = () => changeMonth(-1);
   document.getElementById('next-month').onclick = () => changeMonth(1);
+
+  document.getElementById('f-cat').onchange = async (ev) => {
+    if(ev.target.value === NEW_CATEGORY_VALUE){
+      const name = window.prompt('Nome da nova categoria:');
+      if(name && name.trim()){
+        const label = name.trim();
+        const id = slugify(label);
+        if(!allCategories().some(c => c.id === id)){
+          customCategories.push({ id, label });
+          await saveCategories();
+        }
+        selectedCategory = id;
+      }
+      render();
+      return;
+    }
+    selectedCategory = ev.target.value;
+  };
 
   document.getElementById('entry-form').onsubmit = async (ev) => {
     ev.preventDefault();
