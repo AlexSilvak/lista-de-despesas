@@ -1,0 +1,7 @@
+{
+  "name": "lista-de-despesas",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "custom"
+}

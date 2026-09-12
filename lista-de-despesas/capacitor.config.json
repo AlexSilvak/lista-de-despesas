@@ -1,0 +1,6 @@
+{
+  "appId": "com.alexsilvak.listadespesas",
+  "appName": "Lista de Despesas",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
